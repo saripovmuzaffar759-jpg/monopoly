@@ -8,13 +8,14 @@ const server = http.createServer(app);
 const io = new Server(server);
 app.use(express.static('public'));
 
+// Хранилище игр
 const games = {};
 
 function roomId() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-// Полный набор из 40 клеток (классическая монополия)
+// Классическое поле из 40 клеток
 function createFullBoard() {
   return [
     { name: 'Старт', type: 'start' },
@@ -79,6 +80,15 @@ const chestCards = [
   { text: 'Штраф за нарушение — заплатите 50', action: p => p.money -= 50 },
 ];
 
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 io.on('connection', (socket) => {
   socket.on('createRoom', (playerName) => {
     const id = roomId();
@@ -100,8 +110,14 @@ io.on('connection', (socket) => {
 
   socket.on('joinRoom', (room, playerName) => {
     const game = games[room];
-    if (!game) return socket.emit('error', 'Комната не найдена');
-    if (game.players.length >= 4) return socket.emit('error', 'Комната заполнена');
+    if (!game) {
+      socket.emit('error', 'Комната не найдена');
+      return;
+    }
+    if (game.players.length >= 4) {
+      socket.emit('error', 'Комната заполнена');
+      return;
+    }
     const colors = ['#3498db', '#2ecc71', '#f39c12', '#9b59b6'];
     game.players.push({
       id: socket.id,
@@ -183,8 +199,6 @@ io.on('connection', (socket) => {
         io.to(room).emit('message', `${player.name}: ${card.text}`);
         if (game.chestDeck.length === 0) game.chestDeck = shuffle([...chestCards]);
       }
-    } else if (cell.type === 'jail') {
-      // просто посещение
     }
   }
 
@@ -258,15 +272,6 @@ io.on('connection', (socket) => {
     }
   });
 });
-
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 server.listen(3000, () => console.log('http://localhost:3000'));
