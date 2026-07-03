@@ -71,6 +71,7 @@
     const socket = io();
     let game, myId;
 
+    // Позиции 40 клеток по периметру
     const cellPositions = [];
     for (let i = 0; i <= 10; i++) cellPositions.push({ col: 10 - i, row: 10 });
     for (let i = 1; i <= 9; i++) cellPositions.push({ col: 0, row: 10 - i });
@@ -99,9 +100,7 @@
       socket.emit('joinRoom', room, name);
     }
 
-    socket.on('error', (msg) => {
-      showError(msg);
-    });
+    socket.on('error', (msg) => showError(msg));
 
     socket.on('gameState', (g) => {
       game = g;
