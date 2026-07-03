@@ -10,8 +10,9 @@
     .login-screen input { display: block; margin: 10px auto; padding: 10px; border-radius: 8px; border: none; width: 200px; }
     .login-screen button { padding: 10px 20px; background: #e94560; color: white; border: none; border-radius: 8px; cursor: pointer; margin: 5px; }
     .game-container { display: none; width: 100%; max-width: 1200px; gap: 20px; }
-    .board { display: grid; grid-template-columns: repeat(11, 1fr); grid-template-rows: repeat(11, 1fr); width: 700px; height: 700px; background: #c8e6c9; border: 3px solid #333; border-radius: 10px; }
-    .cell { border: 1px solid #333; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9px; text-align: center; background: #e8f5e9; }
+    .board-wrapper { position: relative; width: 700px; height: 700px; margin: 0 auto; }
+    .board { width: 100%; height: 100%; background: #c8e6c9; border: 3px solid #333; border-radius: 10px; position: relative; }
+    .cell { position: absolute; border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 8px; text-align: center; background: #e8f5e9; }
     .cell.corner { background: #a5d6a7; }
     .cell.property { background: #fff9c4; }
     .cell.chance { background: #ffcc80; }
@@ -19,10 +20,10 @@
     .cell.tax { background: #ef9a9a; }
     .cell.jail { background: #b0bec5; }
     .cell.parking { background: #c8e6c9; }
-    .cell .price { font-size: 8px; font-weight: bold; }
+    .cell .price { font-size: 7px; font-weight: bold; }
     .cell .houses { font-size: 7px; color: red; }
-    .owner-dot { width: 8px; height: 8px; border-radius: 50%; position: absolute; bottom: 2px; right: 2px; }
-    .player-token { width: 12px; height: 12px; border-radius: 50%; position: absolute; border: 1px solid white; }
+    .owner-dot { width: 10px; height: 10px; border-radius: 50%; position: absolute; bottom: 2px; right: 2px; }
+    .player-token { width: 14px; height: 14px; border-radius: 50%; position: absolute; border: 2px solid white; }
     .side-panel { width: 350px; display: flex; flex-direction: column; gap: 15px; }
     .players-info { display: flex; gap: 10px; flex-wrap: wrap; }
     .player-card { background: #0f3460; padding: 10px; border-radius: 8px; width: 150px; }
@@ -32,6 +33,7 @@
     .dice { font-size: 2rem; margin: 10px; }
     .chat-box { max-height: 200px; overflow-y: auto; background: #0f3460; padding: 10px; border-radius: 8px; }
     .chat-box p { margin: 3px 0; font-size: 0.8rem; }
+    .center-logo { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1.5rem; font-weight: bold; color: #333; text-align: center; }
   </style>
 </head>
 <body>
@@ -44,7 +46,9 @@
   </div>
 
   <div class="game-container" id="gameContainer">
-    <div class="board" id="board"></div>
+    <div class="board-wrapper">
+      <div class="board" id="board"></div>
+    </div>
     <div class="side-panel">
       <h2>Монополия</h2>
       <div>Комната: <strong id="roomCode"></strong></div>
@@ -64,6 +68,30 @@
   <script>
     const socket = io();
     let game, myId;
+
+    // Позиции клеток по периметру (классическая монополия)
+    const cellPositions = [];
+    // Нижний ряд (слева направо): индексы 0..10
+    for (let i = 0; i <= 10; i++) {
+      cellPositions.push({ col: 10 - i, row: 10 }); // старт в левом нижнем углу
+    }
+    // Правый столбец (снизу вверх): индексы 11..19
+    for (let i = 1; i <= 9; i++) {
+      cellPositions.push({ col: 0, row: 10 - i });
+    }
+    // Верхний ряд (справа налево): индексы 20..30
+    for (let i = 0; i <= 10; i++) {
+      cellPositions.push({ col: i, row: 0 });
+    }
+    // Левый столбец (сверху вниз): индексы 31..39
+    for (let i = 1; i <= 9; i++) {
+      cellPositions.push({ col: 10, row: i });
+    }
+
+    function getCellPosition(index) {
+      if (index < 0 || index >= 40) return { col: 0, row: 0 };
+      return cellPositions[index];
+    }
 
     function createGame() {
       const name = document.getElementById('playerName').value.trim();
@@ -94,34 +122,61 @@
     function renderBoard() {
       const boardEl = document.getElementById('board');
       boardEl.innerHTML = '';
-      const cells = game.board;
-      cells.forEach((cell, i) => {
+      const size = 700; // px
+      const cellW = size / 11;
+      const cellH = size / 11;
+
+      game.board.forEach((cell, i) => {
+        const pos = getCellPosition(i);
         const div = document.createElement('div');
-        div.className = 'cell ' + (cell.type === 'property' ? 'property' : cell.type || '');
-        div.innerHTML = `<strong>${cell.name}</strong>`;
-        if (cell.price) div.innerHTML += `<div class="price">💰${cell.price}</div>`;
-        if (cell.houses > 0) div.innerHTML += `<div class="houses">${cell.houses === 5 ? '🏨' : '🏠'.repeat(cell.houses)}</div>`;
+        div.className = 'cell';
+        if (cell.type === 'property') div.classList.add('property');
+        else if (cell.type === 'chance') div.classList.add('chance');
+        else if (cell.type === 'chest') div.classList.add('chest');
+        else if (cell.type === 'tax') div.classList.add('tax');
+        else if (cell.type === 'jail' || cell.type === 'goToJail') div.classList.add('jail');
+        else if (cell.type === 'parking' || cell.type === 'start') div.classList.add('parking');
+        else div.classList.add('corner');
+
+        div.style.left = `${pos.col * cellW}px`;
+        div.style.top = `${pos.row * cellH}px`;
+        div.style.width = `${cellW}px`;
+        div.style.height = `${cellH}px`;
+
+        let innerHTML = `<strong>${cell.name}</strong>`;
+        if (cell.price) innerHTML += `<div class="price">💰${cell.price}</div>`;
+        if (cell.houses > 0) {
+          innerHTML += `<div class="houses">${cell.houses === 5 ? '🏨' : '🏠'.repeat(cell.houses)}</div>`;
+        }
         if (cell.owner) {
           const owner = game.players.find(p => p.id === cell.owner);
           if (owner) {
-            const dot = document.createElement('div');
-            dot.className = 'owner-dot';
-            dot.style.background = owner.color;
-            div.appendChild(dot);
+            innerHTML += `<div class="owner-dot" style="background:${owner.color}"></div>`;
           }
         }
-        game.players.forEach(p => {
+        div.innerHTML = innerHTML;
+
+        // фишки игроков
+        game.players.forEach((p, pi) => {
           if (p.position === i) {
             const token = document.createElement('div');
             token.className = 'player-token';
             token.style.background = p.color;
-            token.style.left = `${2 + Math.random() * 10}px`;
-            token.style.top = `${2 + Math.random() * 10}px`;
+            token.style.left = `${2 + pi * 12}px`;
+            token.style.top = '50%';
+            token.style.transform = 'translateY(-50%)';
             div.appendChild(token);
           }
         });
+
         boardEl.appendChild(div);
       });
+
+      // Логотип в центре
+      const center = document.createElement('div');
+      center.className = 'center-logo';
+      center.textContent = 'МОНОПОЛИЯ';
+      boardEl.appendChild(center);
     }
 
     function renderPlayers() {
