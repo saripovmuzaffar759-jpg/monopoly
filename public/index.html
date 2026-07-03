@@ -4,115 +4,140 @@
   <meta charset="UTF-8">
   <title>Онлайн Монополия</title>
   <style>
-    body { font-family: Arial; background: #1a1a2e; color: white; text-align: center; }
-    .container { max-width: 1000px; margin: 0 auto; }
-    .board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin: 20px 0; }
-    .cell { background: #16213e; border-radius: 8px; padding: 8px; font-size: 0.7rem; }
-    .cell.owned { border: 2px solid gold; }
-    .players { display: flex; gap: 10px; justify-content: center; margin: 10px; }
-    .player { background: #0f3460; padding: 10px; border-radius: 10px; min-width: 120px; }
-    .player.active { box-shadow: 0 0 15px gold; }
-    .btn { padding: 10px 20px; background: #e94560; border: none; color: white; border-radius: 8px; cursor: pointer; margin: 5px; }
-    .btn:disabled { background: #555; }
-    input { padding: 10px; border-radius: 8px; border: none; margin: 5px; }
-    .chat { max-height: 150px; overflow-y: auto; background: #0f3460; padding: 10px; border-radius: 8px; text-align: left; margin: 10px; }
-    .chat p { margin: 3px 0; font-size: 0.8rem; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial; background: #1a1a2e; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .container { width: 1200px; display: flex; gap: 20px; }
+    .board { display: grid; grid-template-columns: repeat(11, 1fr); grid-template-rows: repeat(11, 1fr); width: 700px; height: 700px; background: #c8e6c9; border: 3px solid #333; border-radius: 10px; }
+    .cell { border: 1px solid #333; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 9px; text-align: center; background: #e8f5e9; }
+    .cell.corner { background: #a5d6a7; }
+    .cell.property { background: #fff9c4; }
+    .cell.chance { background: #ffcc80; }
+    .cell.chest { background: #80cbc4; }
+    .cell.tax { background: #ef9a9a; }
+    .cell.jail { background: #b0bec5; }
+    .cell.parking { background: #c8e6c9; }
+    .cell .price { font-size: 8px; font-weight: bold; }
+    .cell .houses { font-size: 7px; color: red; }
+    .cell .owner-dot { width: 8px; height: 8px; border-radius: 50%; position: absolute; bottom: 2px; right: 2px; }
+    .player-token { width: 12px; height: 12px; border-radius: 50%; position: absolute; border: 1px solid white; }
+    .side-panel { width: 350px; display: flex; flex-direction: column; gap: 15px; }
+    .players-info { display: flex; gap: 10px; flex-wrap: wrap; }
+    .player-card { background: #0f3460; padding: 10px; border-radius: 8px; width: 150px; }
+    .player-card.active { box-shadow: 0 0 10px gold; }
+    .btn { padding: 10px 20px; background: #e94560; border: none; color: white; border-radius: 8px; cursor: pointer; font-weight: bold; }
+    .btn:disabled { background: #555; cursor: not-allowed; }
+    .dice { font-size: 2rem; margin: 10px; }
+    .chat-box { max-height: 200px; overflow-y: auto; background: #0f3460; padding: 10px; border-radius: 8px; }
+    .chat-box p { margin: 3px 0; font-size: 0.8rem; }
+    input { padding: 8px; border-radius: 5px; border: none; }
   </style>
 </head>
 <body>
-  <div class="container" id="app">
-    <div id="login">
+  <div class="container">
+    <div class="board" id="board"></div>
+    <div class="side-panel">
       <h2>Онлайн Монополия</h2>
-      <input id="playerName" placeholder="Твоё имя"><br>
-      <button class="btn" onclick="createGame()">Создать комнату</button>
-      <br>
-      <input id="roomId" placeholder="ID комнаты">
-      <button class="btn" onclick="joinGame()">Присоединиться</button>
-    </div>
-    <div id="game" style="display:none">
-      <h2>Комната <span id="roomCode"></span></h2>
-      <div class="players" id="playersList"></div>
-      <div class="board" id="board"></div>
+      <div>Комната: <strong id="roomCode"></strong></div>
+      <div class="players-info" id="playersInfo"></div>
       <div>
-        <button class="btn" id="rollBtn">Бросить кубик</button>
-        <button class="btn" id="buyBtn" disabled>Купить</button>
-        <span id="diceResult"></span>
+        <button class="btn" id="rollBtn">🎲 Бросить кубик</button>
+        <span class="dice" id="diceResult"></span>
       </div>
-      <div class="chat" id="chatBox"></div>
+      <button class="btn" id="buyBtn" disabled>Купить участок</button>
+      <button class="btn" id="buildBtn" disabled>Построить дом (100)</button>
+      <div class="chat-box" id="chatBox"></div>
       <input id="chatInput" placeholder="Сообщение..."><button class="btn" onclick="sendChat()">Отправить</button>
+      <div id="messages"></div>
     </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
-    let currentRoom = null;
-    let currentGame = null;
+    let game, myId;
 
-    function createGame() {
-      const name = document.getElementById('playerName').value.trim();
-      if (!name) return alert('Введи имя');
-      socket.emit('createRoom', name);
-    }
+    const boardEl = document.getElementById('board');
+    const playersInfo = document.getElementById('playersInfo');
+    const rollBtn = document.getElementById('rollBtn');
+    const buyBtn = document.getElementById('buyBtn');
+    const buildBtn = document.getElementById('buildBtn');
+    const diceResult = document.getElementById('diceResult');
+    const chatBox = document.getElementById('chatBox');
+    const roomCodeEl = document.getElementById('roomCode');
 
-    function joinGame() {
-      const name = document.getElementById('playerName').value.trim();
-      const room = document.getElementById('roomId').value.trim();
-      if (!name || !room) return alert('Введи имя и ID комнаты');
-      socket.emit('joinRoom', room, name);
-    }
-
-    socket.on('gameState', (game) => {
-      currentGame = game;
-      currentRoom = game.id;
-      document.getElementById('login').style.display = 'none';
-      document.getElementById('game').style.display = 'block';
-      document.getElementById('roomCode').innerText = game.id;
-      renderBoard(game);
-      renderPlayers(game);
-      renderChat(game);
-      const player = game.players[game.currentTurn];
-      document.getElementById('rollBtn').disabled = (player && player.id !== socket.id);
-      const cell = player ? game.board[player.position] : null;
-      document.getElementById('buyBtn').disabled = !(cell && cell.type === 'property' && cell.owner === null && player && player.id === socket.id && player.money >= cell.price);
-      document.getElementById('diceResult').innerText = `🎲 ${game.dice[0]} + ${game.dice[1]}`;
+    socket.on('gameState', (g) => {
+      game = g;
+      myId = socket.id;
+      renderBoard();
+      renderPlayers();
+      updateButtons();
+      diceResult.textContent = `🎲 ${g.dice[0]} + ${g.dice[1]}`;
+      roomCodeEl.textContent = g.id;
+      chatBox.innerHTML = g.chat.map(m => `<p><b>${m.name}</b>: ${m.text}</p>`).join('');
     });
 
-    function renderBoard(game) {
-      const boardDiv = document.getElementById('board');
-      boardDiv.innerHTML = game.board.map((cell, i) => {
-        const playerHere = game.players.filter(p => p.position === i);
-        return `<div class="cell ${cell.owner ? 'owned' : ''}" style="background:${cell.owner ? game.players.find(p=>p.id===cell.owner)?.color : ''}">
-          ${cell.name}<br>${cell.price ? '💰'+cell.price : ''}<br>
-          ${playerHere.map(p=>'🔴').join('')}
-        </div>`;
-      }).join('');
+    function renderBoard() {
+      boardEl.innerHTML = '';
+      const cells = game.board;
+      cells.forEach((cell, i) => {
+        const div = document.createElement('div');
+        div.className = 'cell ' + (cell.type || 'property');
+        div.innerHTML = `<strong>${cell.name}</strong>`;
+        if (cell.price) div.innerHTML += `<div class="price">💰${cell.price}</div>`;
+        if (cell.rent) div.innerHTML += `<div class="price">Аренда: ${cell.rent}</div>`;
+        if (cell.houses > 0) div.innerHTML += `<div class="houses">🏠${cell.houses}</div>`;
+        if (cell.owner) {
+          const owner = game.players.find(p => p.id === cell.owner);
+          if (owner) {
+            const dot = document.createElement('div');
+            dot.className = 'owner-dot';
+            dot.style.background = owner.color;
+            div.appendChild(dot);
+          }
+        }
+        // фишки игроков
+        game.players.forEach(p => {
+          if (p.position === i) {
+            const token = document.createElement('div');
+            token.className = 'player-token';
+            token.style.background = p.color;
+            token.style.left = `${2 + Math.random() * 10}px`;
+            token.style.top = `${2 + Math.random() * 10}px`;
+            div.appendChild(token);
+          }
+        });
+        boardEl.appendChild(div);
+      });
     }
 
-    function renderPlayers(game) {
-      document.getElementById('playersList').innerHTML = game.players.map((p, idx) => 
-        `<div class="player ${idx === game.currentTurn ? 'active' : ''}" style="border:2px solid ${p.color}">
-          ${p.name}<br>💰${p.money} ${p.inJail ? '🔒' : ''}
+    function renderPlayers() {
+      playersInfo.innerHTML = game.players.map((p, idx) => 
+        `<div class="player-card ${idx === game.currentTurn ? 'active' : ''}">
+          <div style="color:${p.color}">⬤ ${p.name}</div>
+          <div>💰${p.money}</div>
+          ${p.inJail ? '<div>🔒 В тюрьме</div>' : ''}
         </div>`
       ).join('');
     }
 
-    function renderChat(game) {
-      document.getElementById('chatBox').innerHTML = game.chat.map(m => `<p><b>${m.name}</b>: ${m.text}</p>`).join('');
+    function updateButtons() {
+      const player = game.players.find(p => p.id === myId);
+      const isMyTurn = player && game.players[game.currentTurn].id === myId;
+      rollBtn.disabled = !isMyTurn;
+      
+      const cell = player ? game.board[player.position] : null;
+      buyBtn.disabled = !(isMyTurn && cell && cell.type === 'property' && !cell.owner && player.money >= cell.price);
+      buildBtn.disabled = !(isMyTurn && cell && cell.owner === myId && (cell.houses || 0) < 4 && player.money >= 100);
     }
 
-    document.getElementById('rollBtn').onclick = () => {
-      if (currentRoom) socket.emit('rollDice', currentRoom);
-    };
-
-    document.getElementById('buyBtn').onclick = () => {
-      if (currentRoom) socket.emit('buyProperty', currentRoom);
-    };
+    rollBtn.onclick = () => socket.emit('rollDice', game.id);
+    buyBtn.onclick = () => socket.emit('buyProperty', game.id);
+    buildBtn.onclick = () => socket.emit('buildHouse', game.id);
 
     function sendChat() {
       const inp = document.getElementById('chatInput');
-      if (inp.value.trim() && currentRoom) {
-        socket.emit('chat', currentRoom, inp.value.trim());
+      if (inp.value.trim()) {
+        socket.emit('chat', game.id, inp.value.trim());
         inp.value = '';
       }
     }
