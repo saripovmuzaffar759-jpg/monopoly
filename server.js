@@ -14,26 +14,49 @@ function roomId() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-function createBoard() {
+// Полный набор из 40 клеток (классическая монополия)
+function createFullBoard() {
   return [
     { name: 'Старт', type: 'start' },
-    { name: 'Житная ул.', price: 60, rent: 2, owner: null, houses: 0, group: 'brown', type: 'property' },
-    { name: 'Шанс', type: 'chance' },
-    { name: 'Нагатинская ул.', price: 80, rent: 4, owner: null, houses: 0, group: 'brown', type: 'property' },
-    { name: 'Налог', type: 'tax', amount: 50 },
-    { name: 'Варшавское шоссе', price: 200, rent: 8, owner: null, houses: 0, group: 'blue', type: 'property' },
+    { name: 'Житная ул.', price: 60, rent: [2,10,30,90,160,250], housePrice: 50, owner: null, houses: 0, group: 'brown' },
     { name: 'Казна', type: 'chest' },
-    { name: 'Рублёвка', price: 260, rent: 22, owner: null, houses: 0, group: 'blue', type: 'property' },
-    { name: 'Тверская', price: 280, rent: 26, owner: null, houses: 0, group: 'blue', type: 'property' },
+    { name: 'Нагатинская ул.', price: 60, rent: [4,20,60,180,320,450], housePrice: 50, owner: null, houses: 0, group: 'brown' },
+    { name: 'Подоходный налог', type: 'tax', amount: 100 },
+    { name: 'Варшавский вокзал', price: 200, rent: [25,50,100,200], housePrice: 0, owner: null, houses: 0, group: 'station' },
+    { name: 'Рижская ул.', price: 100, rent: [6,30,90,270,400,550], housePrice: 50, owner: null, houses: 0, group: 'lightblue' },
+    { name: 'Шанс', type: 'chance' },
+    { name: 'Тверская ул.', price: 100, rent: [6,30,90,270,400,550], housePrice: 50, owner: null, houses: 0, group: 'lightblue' },
+    { name: 'Пушкинская ул.', price: 120, rent: [8,40,100,300,450,600], housePrice: 50, owner: null, houses: 0, group: 'lightblue' },
+    { name: 'Тюрьма (только посещение)', type: 'jail' },
+    { name: 'Смоленская ул.', price: 140, rent: [10,50,150,450,625,750], housePrice: 100, owner: null, houses: 0, group: 'pink' },
+    { name: 'Электростанция', price: 150, rent: [0], housePrice: 0, owner: null, houses: 0, group: 'utility' },
+    { name: 'Красная Пресня', price: 140, rent: [10,50,150,450,625,750], housePrice: 100, owner: null, houses: 0, group: 'pink' },
+    { name: 'Кутузовский просп.', price: 160, rent: [12,60,180,500,700,900], housePrice: 100, owner: null, houses: 0, group: 'pink' },
+    { name: 'Рижский вокзал', price: 200, rent: [25,50,100,200], housePrice: 0, owner: null, houses: 0, group: 'station' },
+    { name: 'Пятницкая ул.', price: 180, rent: [14,70,200,550,750,950], housePrice: 100, owner: null, houses: 0, group: 'orange' },
+    { name: 'Казна', type: 'chest' },
+    { name: 'Неглинная ул.', price: 180, rent: [14,70,200,550,750,950], housePrice: 100, owner: null, houses: 0, group: 'orange' },
+    { name: 'Тверской бульвар', price: 200, rent: [16,80,220,600,800,1000], housePrice: 100, owner: null, houses: 0, group: 'orange' },
     { name: 'Бесплатная стоянка', type: 'parking' },
-    { name: 'Ленинский просп.', price: 320, rent: 28, owner: null, houses: 0, group: 'green', type: 'property' },
+    { name: 'Арбат', price: 220, rent: [18,90,250,700,875,1050], housePrice: 150, owner: null, houses: 0, group: 'red' },
     { name: 'Шанс', type: 'chance' },
-    { name: 'Кутузовский просп.', price: 340, rent: 30, owner: null, houses: 0, group: 'green', type: 'property' },
-    { name: 'Арбат', price: 360, rent: 32, owner: null, houses: 0, group: 'green', type: 'property' },
-    { name: 'Вокзал', price: 200, rent: 25, owner: null, houses: 0, group: 'station', type: 'property' },
+    { name: 'Сретенка', price: 220, rent: [18,90,250,700,875,1050], housePrice: 150, owner: null, houses: 0, group: 'red' },
+    { name: 'Мясницкая ул.', price: 240, rent: [20,100,300,750,925,1100], housePrice: 150, owner: null, houses: 0, group: 'red' },
+    { name: 'Казанский вокзал', price: 200, rent: [25,50,100,200], housePrice: 0, owner: null, houses: 0, group: 'station' },
+    { name: 'Манежная ул.', price: 260, rent: [22,110,330,800,975,1150], housePrice: 150, owner: null, houses: 0, group: 'yellow' },
+    { name: 'Театральная ул.', price: 260, rent: [22,110,330,800,975,1150], housePrice: 150, owner: null, houses: 0, group: 'yellow' },
+    { name: 'Водопровод', price: 150, rent: [0], housePrice: 0, owner: null, houses: 0, group: 'utility' },
+    { name: 'Никитская ул.', price: 280, rent: [24,120,360,850,1025,1200], housePrice: 150, owner: null, houses: 0, group: 'yellow' },
+    { name: 'Отправляйтесь в тюрьму', type: 'goToJail' },
+    { name: 'Гоголевский бульвар', price: 300, rent: [26,130,390,900,1100,1275], housePrice: 200, owner: null, houses: 0, group: 'green' },
     { name: 'Казна', type: 'chest' },
-    { name: 'Неглинная ул.', price: 400, rent: 40, owner: null, houses: 0, group: 'yellow', type: 'property' },
-    { name: 'Тюрьма', type: 'jail' },
+    { name: 'Петровка', price: 300, rent: [26,130,390,900,1100,1275], housePrice: 200, owner: null, houses: 0, group: 'green' },
+    { name: 'Страстной бульвар', price: 320, rent: [28,150,450,1000,1200,1400], housePrice: 200, owner: null, houses: 0, group: 'green' },
+    { name: 'Ленинградский вокзал', price: 200, rent: [25,50,100,200], housePrice: 0, owner: null, houses: 0, group: 'station' },
+    { name: 'Шанс', type: 'chance' },
+    { name: 'Малая Бронная', price: 350, rent: [35,175,500,1100,1300,1500], housePrice: 200, owner: null, houses: 0, group: 'darkblue' },
+    { name: 'Налог на роскошь', type: 'tax', amount: 75 },
+    { name: 'Тверская-Ямская', price: 400, rent: [50,200,600,1400,1700,2000], housePrice: 200, owner: null, houses: 0, group: 'darkblue' },
   ];
 }
 
@@ -43,7 +66,8 @@ const chanceCards = [
   { text: 'Оплатите штраф 30', action: p => p.money -= 30 },
   { text: 'Вас оштрафовали на 20', action: p => p.money -= 20 },
   { text: 'Получите наследство 150', action: p => p.money += 150 },
-  { text: 'Отправляйтесь в тюрьму', action: p => { p.position = 15; p.inJail = true; } },
+  { text: 'Отправляйтесь в тюрьму', action: p => { p.position = 10; p.inJail = true; } },
+  { text: 'Вы освобождены из тюрьмы (сохраните карту)', action: p => { p.inJail = false; } },
 ];
 
 const chestCards = [
@@ -61,11 +85,13 @@ io.on('connection', (socket) => {
     const game = {
       id,
       players: [{ id: socket.id, name: playerName, money: 1500, position: 0, inJail: false, color: '#e74c3c' }],
-      board: createBoard(),
+      board: createFullBoard(),
       currentTurn: 0,
       dice: [1, 1],
       status: 'waiting',
       chat: [],
+      chanceDeck: shuffle([...chanceCards]),
+      chestDeck: shuffle([...chestCards]),
     };
     games[id] = game;
     socket.join(id);
@@ -105,6 +131,7 @@ io.on('connection', (socket) => {
         player.money -= 50;
         io.to(room).emit('message', `${player.name} платит 50 и остаётся в тюрьме.`);
         endTurn(game, room);
+        io.to(room).emit('gameState', game);
         return;
       }
     }
@@ -118,8 +145,23 @@ io.on('connection', (socket) => {
   });
 
   function handleCell(game, room, player, cell) {
+    if (cell.type === 'goToJail') {
+      player.position = 10;
+      player.inJail = true;
+      io.to(room).emit('message', `${player.name} отправляется в тюрьму!`);
+      return;
+    }
     if (cell.type === 'property' && cell.owner && cell.owner !== player.id) {
-      const rent = cell.rent + (cell.houses || 0) * 10;
+      let rent;
+      if (cell.group === 'station') {
+        const ownerStations = game.board.filter(c => c.group === 'station' && c.owner === cell.owner).length;
+        rent = cell.rent[ownerStations - 1];
+      } else if (cell.group === 'utility') {
+        const ownerUtils = game.board.filter(c => c.group === 'utility' && c.owner === cell.owner).length;
+        rent = (ownerUtils === 2 ? 10 : 4) * (game.dice[0] + game.dice[1]);
+      } else {
+        rent = cell.rent[cell.houses || 0];
+      }
       player.money -= rent;
       const owner = game.players.find(p => p.id === cell.owner);
       if (owner) owner.money += rent;
@@ -128,17 +170,21 @@ io.on('connection', (socket) => {
       player.money -= cell.amount;
       io.to(room).emit('message', `${player.name} платит налог ${cell.amount}`);
     } else if (cell.type === 'chance') {
-      const card = chanceCards[Math.floor(Math.random() * chanceCards.length)];
-      card.action(player);
-      io.to(room).emit('message', `${player.name}: ${card.text}`);
+      const card = game.chanceDeck.pop();
+      if (card) {
+        card.action(player);
+        io.to(room).emit('message', `${player.name}: ${card.text}`);
+        if (game.chanceDeck.length === 0) game.chanceDeck = shuffle([...chanceCards]);
+      }
     } else if (cell.type === 'chest') {
-      const card = chestCards[Math.floor(Math.random() * chestCards.length)];
-      card.action(player);
-      io.to(room).emit('message', `${player.name}: ${card.text}`);
+      const card = game.chestDeck.pop();
+      if (card) {
+        card.action(player);
+        io.to(room).emit('message', `${player.name}: ${card.text}`);
+        if (game.chestDeck.length === 0) game.chestDeck = shuffle([...chestCards]);
+      }
     } else if (cell.type === 'jail') {
-      player.inJail = true;
-      player.position = 15;
-      io.to(room).emit('message', `${player.name} отправляется в тюрьму!`);
+      // просто посещение
     }
   }
 
@@ -176,13 +222,18 @@ io.on('connection', (socket) => {
     const player = game.players[game.currentTurn];
     if (player.id !== socket.id) return;
     const cell = game.board[player.position];
-    if (cell.owner === player.id && (cell.houses || 0) < 4 && player.money >= 100) {
-      player.money -= 100;
+    if (cell.owner === player.id && (cell.houses || 0) < 5 && player.money >= cell.housePrice && hasMonopoly(game, player.id, cell.group)) {
+      player.money -= cell.housePrice;
       cell.houses = (cell.houses || 0) + 1;
-      io.to(room).emit('message', `${player.name} строит дом на ${cell.name}`);
+      io.to(room).emit('message', `${player.name} строит ${cell.houses === 5 ? 'отель' : 'дом'} на ${cell.name}`);
       io.to(room).emit('gameState', game);
     }
   });
+
+  function hasMonopoly(game, playerId, group) {
+    const groupCells = game.board.filter(c => c.group === group && c.type === 'property');
+    return groupCells.every(c => c.owner === playerId);
+  }
 
   socket.on('chat', (room, text) => {
     const game = games[room];
@@ -207,6 +258,15 @@ io.on('connection', (socket) => {
     }
   });
 });
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 server.listen(3000, () => console.log('http://localhost:3000'));
