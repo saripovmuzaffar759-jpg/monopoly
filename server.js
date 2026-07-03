@@ -8,14 +8,12 @@ const server = http.createServer(app);
 const io = new Server(server);
 app.use(express.static('public'));
 
-// Хранилище игр
 const games = {};
 
 function roomId() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-// Классическое поле из 40 клеток
 function createFullBoard() {
   return [
     { name: 'Старт', type: 'start' },
@@ -28,7 +26,7 @@ function createFullBoard() {
     { name: 'Шанс', type: 'chance' },
     { name: 'Тверская ул.', price: 100, rent: [6,30,90,270,400,550], housePrice: 50, owner: null, houses: 0, group: 'lightblue' },
     { name: 'Пушкинская ул.', price: 120, rent: [8,40,100,300,450,600], housePrice: 50, owner: null, houses: 0, group: 'lightblue' },
-    { name: 'Тюрьма (только посещение)', type: 'jail' },
+    { name: 'Тюрьма (посещение)', type: 'jail' },
     { name: 'Смоленская ул.', price: 140, rent: [10,50,150,450,625,750], housePrice: 100, owner: null, houses: 0, group: 'pink' },
     { name: 'Электростанция', price: 150, rent: [0], housePrice: 0, owner: null, houses: 0, group: 'utility' },
     { name: 'Красная Пресня', price: 140, rent: [10,50,150,450,625,750], housePrice: 100, owner: null, houses: 0, group: 'pink' },
@@ -68,7 +66,6 @@ const chanceCards = [
   { text: 'Вас оштрафовали на 20', action: p => p.money -= 20 },
   { text: 'Получите наследство 150', action: p => p.money += 150 },
   { text: 'Отправляйтесь в тюрьму', action: p => { p.position = 10; p.inJail = true; } },
-  { text: 'Вы освобождены из тюрьмы (сохраните карту)', action: p => { p.inJail = false; } },
 ];
 
 const chestCards = [
@@ -110,14 +107,8 @@ io.on('connection', (socket) => {
 
   socket.on('joinRoom', (room, playerName) => {
     const game = games[room];
-    if (!game) {
-      socket.emit('error', 'Комната не найдена');
-      return;
-    }
-    if (game.players.length >= 4) {
-      socket.emit('error', 'Комната заполнена');
-      return;
-    }
+    if (!game) return socket.emit('error', 'Комната не найдена');
+    if (game.players.length >= 4) return socket.emit('error', 'Комната заполнена');
     const colors = ['#3498db', '#2ecc71', '#f39c12', '#9b59b6'];
     game.players.push({
       id: socket.id,
@@ -133,8 +124,10 @@ io.on('connection', (socket) => {
 
   socket.on('rollDice', (room) => {
     const game = games[room];
-    if (!game || game.players[game.currentTurn].id !== socket.id || game.status === 'gameOver') return;
+    if (!game || game.status === 'gameOver') return;
     const player = game.players[game.currentTurn];
+    if (!player || player.id !== socket.id) return;
+
     const d1 = Math.floor(Math.random() * 6) + 1;
     const d2 = Math.floor(Math.random() * 6) + 1;
     game.dice = [d1, d2];
@@ -146,17 +139,24 @@ io.on('connection', (socket) => {
       } else {
         player.money -= 50;
         io.to(room).emit('message', `${player.name} платит 50 и остаётся в тюрьме.`);
-        endTurn(game, room);
+        nextTurn(game, room);
         io.to(room).emit('gameState', game);
         return;
       }
     }
 
-    player.position = (player.position + d1 + d2) % game.board.length;
+    const oldPos = player.position;
+    player.position = (oldPos + d1 + d2) % 40;
+    // Проверка прохода через старт
+    if (oldPos + d1 + d2 >= 40) {
+      player.money += 200;
+      io.to(room).emit('message', `${player.name} получает 200 за проход Старта`);
+    }
+
     const cell = game.board[player.position];
     handleCell(game, room, player, cell);
     if (player.money <= 0) bankrupt(game, room, player);
-    if (game.status !== 'gameOver') endTurn(game, room);
+    if (game.status !== 'gameOver') nextTurn(game, room);
     io.to(room).emit('gameState', game);
   });
 
@@ -171,7 +171,7 @@ io.on('connection', (socket) => {
       let rent;
       if (cell.group === 'station') {
         const ownerStations = game.board.filter(c => c.group === 'station' && c.owner === cell.owner).length;
-        rent = cell.rent[ownerStations - 1];
+        rent = cell.rent[ownerStations - 1] || cell.rent[0];
       } else if (cell.group === 'utility') {
         const ownerUtils = game.board.filter(c => c.group === 'utility' && c.owner === cell.owner).length;
         rent = (ownerUtils === 2 ? 10 : 4) * (game.dice[0] + game.dice[1]);
@@ -186,19 +186,18 @@ io.on('connection', (socket) => {
       player.money -= cell.amount;
       io.to(room).emit('message', `${player.name} платит налог ${cell.amount}`);
     } else if (cell.type === 'chance') {
+      if (game.chanceDeck.length === 0) game.chanceDeck = shuffle([...chanceCards]);
       const card = game.chanceDeck.pop();
-      if (card) {
-        card.action(player);
-        io.to(room).emit('message', `${player.name}: ${card.text}`);
-        if (game.chanceDeck.length === 0) game.chanceDeck = shuffle([...chanceCards]);
-      }
+      card.action(player);
+      io.to(room).emit('message', `${player.name}: ${card.text}`);
+      if (card.text.includes('тюрьму') && player.inJail) player.position = 10;
     } else if (cell.type === 'chest') {
+      if (game.chestDeck.length === 0) game.chestDeck = shuffle([...chestCards]);
       const card = game.chestDeck.pop();
-      if (card) {
-        card.action(player);
-        io.to(room).emit('message', `${player.name}: ${card.text}`);
-        if (game.chestDeck.length === 0) game.chestDeck = shuffle([...chestCards]);
-      }
+      card.action(player);
+      io.to(room).emit('message', `${player.name}: ${card.text}`);
+    } else if (cell.type === 'jail') {
+      // просто посещение
     }
   }
 
@@ -212,15 +211,20 @@ io.on('connection', (socket) => {
     }
   }
 
-  function endTurn(game, room) {
+  function nextTurn(game, room) {
+    if (game.players.length === 0) return;
     game.currentTurn = (game.currentTurn + 1) % game.players.length;
+    const player = game.players[game.currentTurn];
+    if (player.inJail) {
+      io.to(room).emit('message', `${player.name} в тюрьме. Бросайте кубик чтобы попытаться выйти.`);
+    }
   }
 
   socket.on('buyProperty', (room) => {
     const game = games[room];
-    if (!game) return;
+    if (!game || game.status === 'gameOver') return;
     const player = game.players[game.currentTurn];
-    if (player.id !== socket.id) return;
+    if (!player || player.id !== socket.id) return;
     const cell = game.board[player.position];
     if (cell.type === 'property' && !cell.owner && player.money >= cell.price) {
       player.money -= cell.price;
@@ -230,24 +234,27 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('buildHouse', (room) => {
-    const game = games[room];
-    if (!game) return;
-    const player = game.players[game.currentTurn];
-    if (player.id !== socket.id) return;
-    const cell = game.board[player.position];
-    if (cell.owner === player.id && (cell.houses || 0) < 5 && player.money >= cell.housePrice && hasMonopoly(game, player.id, cell.group)) {
-      player.money -= cell.housePrice;
-      cell.houses = (cell.houses || 0) + 1;
-      io.to(room).emit('message', `${player.name} строит ${cell.houses === 5 ? 'отель' : 'дом'} на ${cell.name}`);
-      io.to(room).emit('gameState', game);
-    }
-  });
-
   function hasMonopoly(game, playerId, group) {
     const groupCells = game.board.filter(c => c.group === group && c.type === 'property');
-    return groupCells.every(c => c.owner === playerId);
+    return groupCells.length > 0 && groupCells.every(c => c.owner === playerId);
   }
+
+  socket.on('buildHouse', (room) => {
+    const game = games[room];
+    if (!game || game.status === 'gameOver') return;
+    const player = game.players[game.currentTurn];
+    if (!player || player.id !== socket.id) return;
+    const cell = game.board[player.position];
+    if (!cell || cell.type !== 'property' || cell.owner !== player.id) return;
+    if (cell.group === 'station' || cell.group === 'utility') return; // нельзя строить дома
+    if (cell.houses >= 5) return; // уже отель
+    if (!hasMonopoly(game, player.id, cell.group)) return; // нужна монополия
+    if (player.money < cell.housePrice) return;
+    player.money -= cell.housePrice;
+    cell.houses++;
+    io.to(room).emit('message', `${player.name} строит ${cell.houses === 5 ? 'отель' : 'дом'} на ${cell.name}`);
+    io.to(room).emit('gameState', game);
+  });
 
   socket.on('chat', (room, text) => {
     const game = games[room];
