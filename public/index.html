@@ -34,6 +34,7 @@
     .chat-box { max-height: 200px; overflow-y: auto; background: #0f3460; padding: 10px; border-radius: 8px; }
     .chat-box p { margin: 3px 0; font-size: 0.8rem; }
     .center-logo { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1.5rem; font-weight: bold; color: #333; text-align: center; }
+    .error-msg { color: #e74c3c; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -43,6 +44,7 @@
     <button onclick="createGame()">Создать комнату</button><br>
     <input type="text" id="roomId" placeholder="ID комнаты">
     <button onclick="joinGame()">Присоединиться</button>
+    <div class="error-msg" id="errorMsg"></div>
   </div>
 
   <div class="game-container" id="gameContainer">
@@ -69,42 +71,37 @@
     const socket = io();
     let game, myId;
 
-    // Позиции клеток по периметру (классическая монополия)
     const cellPositions = [];
-    // Нижний ряд (слева направо): индексы 0..10
-    for (let i = 0; i <= 10; i++) {
-      cellPositions.push({ col: 10 - i, row: 10 }); // старт в левом нижнем углу
-    }
-    // Правый столбец (снизу вверх): индексы 11..19
-    for (let i = 1; i <= 9; i++) {
-      cellPositions.push({ col: 0, row: 10 - i });
-    }
-    // Верхний ряд (справа налево): индексы 20..30
-    for (let i = 0; i <= 10; i++) {
-      cellPositions.push({ col: i, row: 0 });
-    }
-    // Левый столбец (сверху вниз): индексы 31..39
-    for (let i = 1; i <= 9; i++) {
-      cellPositions.push({ col: 10, row: i });
-    }
+    for (let i = 0; i <= 10; i++) cellPositions.push({ col: 10 - i, row: 10 });
+    for (let i = 1; i <= 9; i++) cellPositions.push({ col: 0, row: 10 - i });
+    for (let i = 0; i <= 10; i++) cellPositions.push({ col: i, row: 0 });
+    for (let i = 1; i <= 9; i++) cellPositions.push({ col: 10, row: i });
 
     function getCellPosition(index) {
       if (index < 0 || index >= 40) return { col: 0, row: 0 };
       return cellPositions[index];
     }
 
+    function showError(msg) {
+      document.getElementById('errorMsg').textContent = msg;
+    }
+
     function createGame() {
       const name = document.getElementById('playerName').value.trim();
-      if (!name) return alert('Введи имя');
+      if (!name) return showError('Введи имя');
       socket.emit('createRoom', name);
     }
 
     function joinGame() {
       const name = document.getElementById('playerName').value.trim();
       const room = document.getElementById('roomId').value.trim();
-      if (!name || !room) return alert('Введи имя и ID комнаты');
+      if (!name || !room) return showError('Введи имя и ID комнаты');
       socket.emit('joinRoom', room, name);
     }
+
+    socket.on('error', (msg) => {
+      showError(msg);
+    });
 
     socket.on('gameState', (g) => {
       game = g;
@@ -122,7 +119,7 @@
     function renderBoard() {
       const boardEl = document.getElementById('board');
       boardEl.innerHTML = '';
-      const size = 700; // px
+      const size = 700;
       const cellW = size / 11;
       const cellH = size / 11;
 
@@ -145,18 +142,13 @@
 
         let innerHTML = `<strong>${cell.name}</strong>`;
         if (cell.price) innerHTML += `<div class="price">💰${cell.price}</div>`;
-        if (cell.houses > 0) {
-          innerHTML += `<div class="houses">${cell.houses === 5 ? '🏨' : '🏠'.repeat(cell.houses)}</div>`;
-        }
+        if (cell.houses > 0) innerHTML += `<div class="houses">${cell.houses === 5 ? '🏨' : '🏠'.repeat(cell.houses)}</div>`;
         if (cell.owner) {
           const owner = game.players.find(p => p.id === cell.owner);
-          if (owner) {
-            innerHTML += `<div class="owner-dot" style="background:${owner.color}"></div>`;
-          }
+          if (owner) innerHTML += `<div class="owner-dot" style="background:${owner.color}"></div>`;
         }
         div.innerHTML = innerHTML;
 
-        // фишки игроков
         game.players.forEach((p, pi) => {
           if (p.position === i) {
             const token = document.createElement('div');
@@ -172,7 +164,6 @@
         boardEl.appendChild(div);
       });
 
-      // Логотип в центре
       const center = document.createElement('div');
       center.className = 'center-logo';
       center.textContent = 'МОНОПОЛИЯ';
