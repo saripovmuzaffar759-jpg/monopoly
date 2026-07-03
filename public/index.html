@@ -2,68 +2,41 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Онлайн Монополия</title>
+  <title>Дурак онлайн</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial; background: #1a1a2e; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-    .login-screen { text-align: center; background: #16213e; padding: 30px; border-radius: 15px; }
-    .login-screen input { display: block; margin: 10px auto; padding: 10px; border-radius: 8px; border: none; width: 200px; }
-    .login-screen button { padding: 10px 20px; background: #e94560; color: white; border: none; border-radius: 8px; cursor: pointer; margin: 5px; }
-    .game-container { display: none; width: 100%; max-width: 1200px; gap: 20px; }
-    .board-wrapper { position: relative; width: 700px; height: 700px; margin: 0 auto; }
-    .board { width: 100%; height: 100%; background: #c8e6c9; border: 3px solid #333; border-radius: 10px; position: relative; }
-    .cell { position: absolute; border: 1px solid #333; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 8px; text-align: center; background: #e8f5e9; }
-    .cell.corner { background: #a5d6a7; }
-    .cell.property { background: #fff9c4; }
-    .cell.chance { background: #ffcc80; }
-    .cell.chest { background: #80cbc4; }
-    .cell.tax { background: #ef9a9a; }
-    .cell.jail { background: #b0bec5; }
-    .cell.parking { background: #c8e6c9; }
-    .cell .price { font-size: 7px; font-weight: bold; }
-    .cell .houses { font-size: 7px; color: red; }
-    .owner-dot { width: 10px; height: 10px; border-radius: 50%; position: absolute; bottom: 2px; right: 2px; }
-    .player-token { width: 14px; height: 14px; border-radius: 50%; position: absolute; border: 2px solid white; }
-    .side-panel { width: 350px; display: flex; flex-direction: column; gap: 15px; }
-    .players-info { display: flex; gap: 10px; flex-wrap: wrap; }
-    .player-card { background: #0f3460; padding: 10px; border-radius: 8px; width: 150px; }
-    .player-card.active { box-shadow: 0 0 10px gold; }
-    .btn { padding: 10px 20px; background: #e94560; border: none; color: white; border-radius: 8px; cursor: pointer; font-weight: bold; }
-    .btn:disabled { background: #555; cursor: not-allowed; }
-    .dice { font-size: 2rem; margin: 10px; }
-    .chat-box { max-height: 200px; overflow-y: auto; background: #0f3460; padding: 10px; border-radius: 8px; }
-    .chat-box p { margin: 3px 0; font-size: 0.8rem; }
-    .center-logo { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1.5rem; font-weight: bold; color: #333; text-align: center; }
-    .error-msg { color: #e74c3c; margin-top: 10px; }
+    body { font-family: Arial; background: #1a1a2e; color: white; text-align: center; }
+    .login { background: #16213e; padding: 30px; border-radius: 15px; display: inline-block; margin: 50px; }
+    input, button { padding: 10px; margin: 5px; border-radius: 8px; border: none; }
+    button { background: #e94560; color: white; cursor: pointer; }
+    .game { display: none; }
+    .hand { display: flex; gap: 10px; justify-content: center; margin: 20px; }
+    .card { width: 60px; height: 90px; background: white; color: black; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 20px; border: 2px solid #ccc; cursor: pointer; }
+    .card.trump { border-color: gold; }
+    .table { display: flex; gap: 20px; justify-content: center; margin: 20px; }
+    .table-pair { display: flex; gap: 10px; }
+    .opponent { margin: 20px; font-size: 1.2rem; }
   </style>
 </head>
 <body>
-  <div class="login-screen" id="loginScreen">
-    <h2>Онлайн Монополия</h2>
-    <input type="text" id="playerName" placeholder="Твоё имя"><br>
+  <div class="login" id="loginScreen">
+    <h2>Дурак онлайн</h2>
+    <input id="playerName" placeholder="Твоё имя"><br>
     <button onclick="createGame()">Создать комнату</button><br>
-    <input type="text" id="roomId" placeholder="ID комнаты">
+    <input id="roomId" placeholder="ID комнаты">
     <button onclick="joinGame()">Присоединиться</button>
-    <div class="error-msg" id="errorMsg"></div>
+    <div id="errorMsg" style="color:red;"></div>
   </div>
 
-  <div class="game-container" id="gameContainer">
-    <div class="board-wrapper">
-      <div class="board" id="board"></div>
+  <div class="game" id="gameScreen">
+    <h2>Дурак</h2>
+    <div>Комната: <strong id="roomCode"></strong></div>
+    <div class="opponent" id="opponentInfo"></div>
+    <div class="table" id="tableArea"></div>
+    <div class="hand" id="myHand"></div>
+    <div style="margin:10px;">
+      <button id="takeBtn" style="display:none;">Забрать</button>
     </div>
-    <div class="side-panel">
-      <h2>Монополия</h2>
-      <div>Комната: <strong id="roomCode"></strong></div>
-      <div class="players-info" id="playersInfo"></div>
-      <div>
-        <button class="btn" id="rollBtn">🎲 Бросить кубик</button>
-        <span class="dice" id="diceResult"></span>
-      </div>
-      <button class="btn" id="buyBtn" disabled>Купить участок</button>
-      <button class="btn" id="buildBtn" disabled>Построить дом</button>
-      <div class="chat-box" id="chatBox"></div>
-      <input type="text" id="chatInput" placeholder="Сообщение..."><button class="btn" onclick="sendChat()">Отправить</button>
-    </div>
+    <div id="statusMsg"></div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -71,134 +44,76 @@
     const socket = io();
     let game, myId;
 
-    const cellPositions = [];
-    for (let i = 0; i <= 10; i++) cellPositions.push({ col: 10 - i, row: 10 });
-    for (let i = 1; i <= 9; i++) cellPositions.push({ col: 0, row: 10 - i });
-    for (let i = 0; i <= 10; i++) cellPositions.push({ col: i, row: 0 });
-    for (let i = 1; i <= 9; i++) cellPositions.push({ col: 10, row: i });
-
-    function getCellPosition(index) {
-      if (index < 0 || index >= 40) return { col: 0, row: 0 };
-      return cellPositions[index];
-    }
-
-    function showError(msg) {
-      document.getElementById('errorMsg').textContent = msg;
-    }
-
     function createGame() {
       const name = document.getElementById('playerName').value.trim();
-      if (!name) return showError('Введи имя');
+      if (!name) return;
       socket.emit('createRoom', name);
     }
 
     function joinGame() {
       const name = document.getElementById('playerName').value.trim();
       const room = document.getElementById('roomId').value.trim();
-      if (!name || !room) return showError('Введи имя и ID комнаты');
+      if (!name || !room) return;
       socket.emit('joinRoom', room, name);
     }
 
-    socket.on('error', (msg) => {
-      showError(msg);
-    });
+    socket.on('error', msg => document.getElementById('errorMsg').textContent = msg);
 
     socket.on('gameState', (g) => {
       game = g;
       myId = socket.id;
       document.getElementById('loginScreen').style.display = 'none';
-      document.getElementById('gameContainer').style.display = 'flex';
-      renderBoard();
-      renderPlayers();
-      updateButtons();
-      document.getElementById('diceResult').textContent = `🎲 ${g.dice[0]} + ${g.dice[1]}`;
+      document.getElementById('gameScreen').style.display = 'block';
       document.getElementById('roomCode').textContent = g.id;
-      document.getElementById('chatBox').innerHTML = g.chat.map(m => `<p><b>${m.name}</b>: ${m.text}</p>`).join('');
+      render();
     });
 
-    function renderBoard() {
-      const boardEl = document.getElementById('board');
-      boardEl.innerHTML = '';
-      const size = 700;
-      const cellW = size / 11;
-      const cellH = size / 11;
-
-      game.board.forEach((cell, i) => {
-        const pos = getCellPosition(i);
-        const div = document.createElement('div');
-        div.className = 'cell';
-        if (cell.type === 'property') div.classList.add('property');
-        else if (cell.type === 'chance') div.classList.add('chance');
-        else if (cell.type === 'chest') div.classList.add('chest');
-        else if (cell.type === 'tax') div.classList.add('tax');
-        else if (cell.type === 'jail' || cell.type === 'goToJail') div.classList.add('jail');
-        else if (cell.type === 'parking' || cell.type === 'start') div.classList.add('parking');
-        else div.classList.add('corner');
-
-        div.style.left = `${pos.col * cellW}px`;
-        div.style.top = `${pos.row * cellH}px`;
-        div.style.width = `${cellW}px`;
-        div.style.height = `${cellH}px`;
-
-        let innerHTML = `<strong>${cell.name}</strong>`;
-        if (cell.price) innerHTML += `<div class="price">💰${cell.price}</div>`;
-        if (cell.houses > 0) innerHTML += `<div class="houses">${cell.houses === 5 ? '🏨' : '🏠'.repeat(cell.houses)}</div>`;
-        if (cell.owner) {
-          const owner = game.players.find(p => p.id === cell.owner);
-          if (owner) innerHTML += `<div class="owner-dot" style="background:${owner.color}"></div>`;
-        }
-        div.innerHTML = innerHTML;
-
-        game.players.forEach((p, pi) => {
-          if (p.position === i) {
-            const token = document.createElement('div');
-            token.className = 'player-token';
-            token.style.background = p.color;
-            token.style.left = `${2 + pi * 12}px`;
-            token.style.top = '50%';
-            token.style.transform = 'translateY(-50%)';
-            div.appendChild(token);
-          }
-        });
-
-        boardEl.appendChild(div);
-      });
-
-      const center = document.createElement('div');
-      center.className = 'center-logo';
-      center.textContent = 'МОНОПОЛИЯ';
-      boardEl.appendChild(center);
-    }
-
-    function renderPlayers() {
-      document.getElementById('playersInfo').innerHTML = game.players.map((p, idx) =>
-        `<div class="player-card ${idx === game.currentTurn ? 'active' : ''}">
-          <div style="color:${p.color}">⬤ ${p.name}</div>
-          <div>💰${p.money}</div>
-          ${p.inJail ? '<div>🔒 В тюрьме</div>' : ''}
+    function render() {
+      const me = game.players.find(p => p.id === myId);
+      const opp = game.players.find(p => p.id !== myId);
+      document.getElementById('opponentInfo').textContent = opp ? `${opp.name} (карт: ${opp.hand.length})` : '';
+      document.getElementById('statusMsg').textContent = game.status === 'waiting' ? 'Ожидание игрока...' : '';
+      
+      // Отображаем карты на руке
+      const handDiv = document.getElementById('myHand');
+      if (me) {
+        handDiv.innerHTML = me.hand.map((c, i) => 
+          `<div class="card ${c.trump ? 'trump' : ''}" onclick="selectCard(${i})">${c.value}${c.suit}</div>`
+        ).join('');
+      }
+      
+      // Стол
+      const tableDiv = document.getElementById('tableArea');
+      tableDiv.innerHTML = game.table.map(pair => 
+        `<div class="table-pair">
+          <div class="card">${pair.attacker.value}${pair.attacker.suit}</div>
+          ${pair.defender ? `<div class="card">${pair.defender.value}${pair.defender.suit}</div>` : ''}
         </div>`
       ).join('');
+      
+      // Кнопка "Забрать" только для защищающегося
+      const takeBtn = document.getElementById('takeBtn');
+      if (game.defender === myId && game.table.some(p => !p.defender)) {
+        takeBtn.style.display = 'inline-block';
+        takeBtn.onclick = () => socket.emit('take', game.id);
+      } else {
+        takeBtn.style.display = 'none';
+      }
     }
 
-    function updateButtons() {
-      const player = game.players.find(p => p.id === myId);
-      const isMyTurn = player && game.players[game.currentTurn].id === myId;
-      document.getElementById('rollBtn').disabled = !isMyTurn;
-      const cell = player ? game.board[player.position] : null;
-      document.getElementById('buyBtn').disabled = !(isMyTurn && cell && cell.type === 'property' && !cell.owner && player.money >= cell.price);
-      const canBuild = isMyTurn && cell && cell.owner === myId && (cell.houses || 0) < 5 && player.money >= (cell.housePrice || 0);
-      document.getElementById('buildBtn').disabled = !canBuild;
-    }
-
-    document.getElementById('rollBtn').onclick = () => socket.emit('rollDice', game.id);
-    document.getElementById('buyBtn').onclick = () => socket.emit('buyProperty', game.id);
-    document.getElementById('buildBtn').onclick = () => socket.emit('buildHouse', game.id);
-
-    function sendChat() {
-      const inp = document.getElementById('chatInput');
-      if (inp.value.trim()) {
-        socket.emit('chat', game.id, inp.value.trim());
-        inp.value = '';
+    function selectCard(index) {
+      const me = game.players.find(p => p.id === myId);
+      if (!me) return;
+      if (game.turn === game.players.indexOf(me)) {
+        // Атакующий
+        socket.emit('attack', game.id, index);
+      } else {
+        // Защищающийся – нужно выбрать, какую карту бить
+        // Для простоты: бьём первую неотбитую атаку
+        const attackIndex = game.table.findIndex(p => !p.defender);
+        if (attackIndex !== -1) {
+          socket.emit('defend', game.id, attackIndex, index);
+        }
       }
     }
   </script>
