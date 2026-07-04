@@ -9,7 +9,7 @@ const io = new Server(server);
 app.use(express.static('public'));
 
 const games = {};
-const publicRooms = []; // { id, name, players }
+const publicRooms = [];
 
 function roomId() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -56,8 +56,10 @@ io.on('connection', (socket) => {
       turn: 0,
       table: [],
       status: 'waiting',
-      phase: 'attack',
+      phase: 'attack',   // attack | defense | postBeat
       chat: [],
+      attackedThisTurn: false, // можно ли ещё подкидывать
+      pendingAttacks: 0,       // сколько карт атаковано в этом раунде (для ограничения)
     };
     games[id] = game;
     publicRooms.push({ id, name: playerName, players: 1 });
@@ -96,6 +98,8 @@ io.on('connection', (socket) => {
     }
     game.status = 'playing';
     game.phase = 'attack';
+    game.attackedThisTurn = false;
+    game.pendingAttacks = 0;
     io.to(room).emit('gameState', game);
   }
 
@@ -115,7 +119,6 @@ io.on('connection', (socket) => {
       game.status = 'gameOver';
       game.winner = alive[0]?.name || 'Ничья';
       io.to(room).emit('gameState', game);
-      // удаляем комнату из списка через 5 минут
       setTimeout(() => {
         delete games[room];
         const idx = publicRooms.findIndex(r => r.id === room);
@@ -132,7 +135,8 @@ io.on('connection', (socket) => {
     if (!game || game.status !== 'playing') return;
     const player = game.players[game.turn];
     if (player.id !== socket.id) return;
-    if (game.phase === 'defense') return;
+    // атаковать можно только когда фаза attack или postBeat
+    if (game.phase !== 'attack' && game.phase !== 'postBeat') return;
     const card = player.hand[cardIndex];
     if (!card) return;
 
@@ -141,12 +145,20 @@ io.on('connection', (socket) => {
       const allowedRanks = new Set(game.table.flatMap(p => [p.attacker.rank, p.defender?.rank]).filter(Boolean));
       if (!allowedRanks.has(card.rank)) return;
       // Ограничение: нельзя подкинуть больше карт, чем у защищающегося
-      if (game.table.length >= game.players[1 - game.turn].hand.length) return;
+      const defender = game.players[1 - game.turn];
+      if (game.table.length >= defender.hand.length) return;
+      // после взятия (когда стол уже очищен) нельзя подкидывать – это новый раунд, фаза attack
+      if (game.phase === 'attack' && game.attackedThisTurn && game.table.length === 0) return;
+    } else {
+      // первый ход в раунде
+      if (game.phase === 'postBeat') return; // бито уже нажато – ждём нового раунда
+      game.attackedThisTurn = true;
     }
 
     player.hand.splice(cardIndex, 1);
     game.table.push({ attacker: card });
     game.phase = 'defense';
+    game.pendingAttacks = game.table.filter(p => !p.defender).length;
     io.to(room).emit('gameState', game);
   });
 
@@ -166,9 +178,10 @@ io.on('connection', (socket) => {
 
     defender.hand.splice(defendIndex, 1);
     game.table[attackIndex].defender = defendCard;
+    game.pendingAttacks = game.table.filter(p => !p.defender).length;
 
-    const allDefended = game.table.every(p => p.defender);
-    if (allDefended) {
+    if (game.pendingAttacks === 0) {
+      // все атаки отбиты
       game.phase = 'postBeat';
     }
     io.to(room).emit('gameState', game);
@@ -179,11 +192,14 @@ io.on('connection', (socket) => {
     if (!game || game.status !== 'playing' || game.phase !== 'postBeat') return;
     const player = game.players[game.turn];
     if (player.id !== socket.id) return;
+    // бито – карты уходят, ход переходит к защищавшемуся
     game.table = [];
     drawCards(game);
     if (checkGameOver(game, room)) return;
-    game.turn = 1 - game.turn;
+    game.turn = 1 - game.turn; // теперь защищавшийся атакует
     game.phase = 'attack';
+    game.attackedThisTurn = false;
+    game.pendingAttacks = 0;
     io.to(room).emit('gameState', game);
   });
 
@@ -192,6 +208,7 @@ io.on('connection', (socket) => {
     if (!game || game.status !== 'playing') return;
     const defender = game.players[1 - game.turn];
     if (defender.id !== socket.id) return;
+    // защищающийся забирает все карты, ход остаётся у атакующего (он снова атакует)
     game.table.forEach(p => {
       defender.hand.push(p.attacker);
       if (p.defender) defender.hand.push(p.defender);
@@ -199,8 +216,10 @@ io.on('connection', (socket) => {
     game.table = [];
     drawCards(game);
     if (checkGameOver(game, room)) return;
-    game.turn = 1 - game.turn;
+    // ход не переходит – тот же атакующий продолжает
     game.phase = 'attack';
+    game.attackedThisTurn = false;
+    game.pendingAttacks = 0;
     io.to(room).emit('gameState', game);
   });
 
@@ -229,7 +248,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    // Игрок отключился – ждём 30 секунд, потом удаляем
     if (currentPlayerRoom && games[currentPlayerRoom]) {
       const player = games[currentPlayerRoom].players[currentPlayerIndex];
       if (player) {
@@ -237,7 +255,6 @@ io.on('connection', (socket) => {
         player.timeoutId = setTimeout(() => {
           const game = games[currentPlayerRoom];
           if (!game) return;
-          // удаляем игрока, завершаем игру или ждём нового
           game.players = game.players.filter(p => p.id !== player.id);
           if (game.players.length === 0) {
             delete games[currentPlayerRoom];
