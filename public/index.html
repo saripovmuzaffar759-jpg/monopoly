@@ -4,17 +4,23 @@
   <meta charset="UTF-8">
   <title>Дурак онлайн</title>
   <style>
-    body { font-family: Arial; background: #1a1a2e; color: white; text-align: center; }
-    .login { background: #16213e; padding: 30px; border-radius: 15px; display: inline-block; margin: 50px; }
-    input, button { padding: 10px; margin: 5px; border-radius: 8px; border: none; }
-    button { background: #e94560; color: white; cursor: pointer; }
+    body { font-family: Arial; background: #1a1a2e; color: white; text-align: center; margin: 0; }
+    .login { background: #16213e; padding: 30px; border-radius: 15px; display: inline-block; margin-top: 80px; }
+    input, button { padding: 10px; margin: 6px; border-radius: 8px; border: none; }
+    button { background: #e94560; color: white; cursor: pointer; font-weight: bold; }
+    button:disabled { background: #555; cursor: not-allowed; }
     .game { display: none; }
-    .hand { display: flex; gap: 10px; justify-content: center; margin: 20px; }
-    .card { width: 60px; height: 90px; background: white; color: black; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 20px; border: 2px solid #ccc; cursor: pointer; }
-    .card.trump { border-color: gold; }
-    .table { display: flex; gap: 20px; justify-content: center; margin: 20px; }
-    .table-pair { display: flex; gap: 10px; }
-    .opponent { margin: 20px; font-size: 1.2rem; }
+    .opponent-area { margin: 10px; font-size: 1.1rem; }
+    .trump-info { margin: 5px; font-size: 0.9rem; color: #fbbf24; }
+    .table { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin: 15px; }
+    .card { width: 70px; height: 100px; background: white; color: black; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 24px; border: 2px solid #ccc; cursor: pointer; user-select: none; position: relative; }
+    .card.trump { border-color: gold; box-shadow: 0 0 6px gold; }
+    .card .corner { position: absolute; top: 4px; left: 6px; font-size: 14px; }
+    .card .center { font-size: 28px; }
+    .my-hand { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 15px; }
+    .actions { margin: 10px; }
+    .status { margin: 8px; font-weight: bold; color: #fbbf24; }
+    .error { color: #e74c3c; }
   </style>
 </head>
 <body>
@@ -24,19 +30,21 @@
     <button onclick="createGame()">Создать комнату</button><br>
     <input id="roomId" placeholder="ID комнаты">
     <button onclick="joinGame()">Присоединиться</button>
-    <div id="errorMsg" style="color:red;"></div>
+    <div id="errorMsg" class="error"></div>
   </div>
 
   <div class="game" id="gameScreen">
     <h2>Дурак</h2>
     <div>Комната: <strong id="roomCode"></strong></div>
-    <div class="opponent" id="opponentInfo"></div>
+    <div class="trump-info" id="trumpDisplay"></div>
+    <div class="opponent-area" id="opponentInfo"></div>
     <div class="table" id="tableArea"></div>
-    <div class="hand" id="myHand"></div>
-    <div style="margin:10px;">
+    <div class="my-hand" id="myHand"></div>
+    <div class="actions">
+      <button id="beatBtn" style="display:none;">Бито</button>
       <button id="takeBtn" style="display:none;">Забрать</button>
     </div>
-    <div id="statusMsg"></div>
+    <div class="status" id="statusMsg"></div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -65,55 +73,76 @@
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('gameScreen').style.display = 'block';
       document.getElementById('roomCode').textContent = g.id;
+      if (g.status === 'gameOver') {
+        document.getElementById('statusMsg').textContent = `Игра окончена! Победитель: ${g.winner || 'Ничья'}`;
+      }
       render();
     });
 
     function render() {
       const me = game.players.find(p => p.id === myId);
       const opp = game.players.find(p => p.id !== myId);
+      document.getElementById('trumpDisplay').textContent = `Козырь: ${game.trump}`;
       document.getElementById('opponentInfo').textContent = opp ? `${opp.name} (карт: ${opp.hand.length})` : '';
-      document.getElementById('statusMsg').textContent = game.status === 'waiting' ? 'Ожидание игрока...' : '';
-      
-      // Отображаем карты на руке
+
+      // Статус
+      let status = '';
+      if (game.status === 'waiting') status = 'Ожидание игрока...';
+      else if (game.phase === 'attack' && game.turn === game.players.indexOf(me)) status = 'Ваш ход (атака)';
+      else if (game.phase === 'defense' && game.players[1 - game.turn]?.id === myId) status = 'Защищайтесь';
+      else if (game.phase === 'postBeat' && game.turn === game.players.indexOf(me)) status = 'Можно подкинуть или Бито';
+      else status = 'Ожидание хода соперника';
+      document.getElementById('statusMsg').textContent = status;
+
+      // Мои карты
       const handDiv = document.getElementById('myHand');
       if (me) {
-        handDiv.innerHTML = me.hand.map((c, i) => 
-          `<div class="card ${c.trump ? 'trump' : ''}" onclick="selectCard(${i})">${c.value}${c.suit}</div>`
-        ).join('');
+        handDiv.innerHTML = me.hand.map((c, i) => `
+          <div class="card ${c.trump ? 'trump' : ''}" onclick="handleCardClick(${i})">
+            <div class="corner">${c.value}</div>
+            <div class="center">${c.suit}</div>
+          </div>`).join('');
       }
-      
+
       // Стол
       const tableDiv = document.getElementById('tableArea');
-      tableDiv.innerHTML = game.table.map(pair => 
-        `<div class="table-pair">
-          <div class="card">${pair.attacker.value}${pair.attacker.suit}</div>
-          ${pair.defender ? `<div class="card">${pair.defender.value}${pair.defender.suit}</div>` : ''}
-        </div>`
-      ).join('');
-      
-      // Кнопка "Забрать" только для защищающегося
+      tableDiv.innerHTML = game.table.map(pair => `
+        <div style="display:flex; gap:8px;">
+          <div class="card">${pair.attacker.value} ${pair.attacker.suit}</div>
+          ${pair.defender ? `<div class="card">${pair.defender.value} ${pair.defender.suit}</div>` : '<div class="card" style="background:#ddd;">?</div>'}
+        </div>`).join('');
+
+      // Кнопки
+      const beatBtn = document.getElementById('beatBtn');
       const takeBtn = document.getElementById('takeBtn');
-      if (game.defender === myId && game.table.some(p => !p.defender)) {
+      beatBtn.style.display = 'none';
+      takeBtn.style.display = 'none';
+      if (game.phase === 'postBeat' && game.players[game.turn]?.id === myId) {
+        beatBtn.style.display = 'inline-block';
+        beatBtn.onclick = () => socket.emit('beat', game.id);
+      }
+      if (game.phase === 'defense' && game.players[1 - game.turn]?.id === myId) {
         takeBtn.style.display = 'inline-block';
         takeBtn.onclick = () => socket.emit('take', game.id);
-      } else {
-        takeBtn.style.display = 'none';
       }
     }
 
-    function selectCard(index) {
+    function handleCardClick(index) {
       const me = game.players.find(p => p.id === myId);
       if (!me) return;
-      if (game.turn === game.players.indexOf(me)) {
-        // Атакующий
+      if (game.status !== 'playing') return;
+      if (game.phase === 'attack' && game.players[game.turn]?.id === myId) {
+        // атакующий ходит
         socket.emit('attack', game.id, index);
-      } else {
-        // Защищающийся – нужно выбрать, какую карту бить
-        // Для простоты: бьём первую неотбитую атаку
+      } else if (game.phase === 'defense' && game.players[1 - game.turn]?.id === myId) {
+        // защищающийся – бьём первую неотбитую атаку, которую можно побить
         const attackIndex = game.table.findIndex(p => !p.defender);
         if (attackIndex !== -1) {
           socket.emit('defend', game.id, attackIndex, index);
         }
+      } else if (game.phase === 'postBeat' && game.players[game.turn]?.id === myId) {
+        // подкидываем (это тот же attack)
+        socket.emit('attack', game.id, index);
       }
     }
   </script>
