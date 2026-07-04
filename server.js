@@ -38,6 +38,21 @@ function shuffle(arr) {
   return a;
 }
 
+// Определяем, кто ходит первым – у кого младший козырь
+function getFirstAttacker(players, trump) {
+  let minRank = Infinity;
+  let firstIndex = 0;
+  players.forEach((p, idx) => {
+    p.hand.forEach(card => {
+      if (card.suit === trump && card.rank < minRank) {
+        minRank = card.rank;
+        firstIndex = idx;
+      }
+    });
+  });
+  return firstIndex;
+}
+
 io.on('connection', (socket) => {
   let currentPlayerRoom = null;
   let currentPlayerIndex = null;
@@ -58,6 +73,7 @@ io.on('connection', (socket) => {
       status: 'waiting',
       phase: 'attack',
       chat: [],
+      roundCount: 0, // счётчик ходов для ограничения подкидывания
     };
     games[id] = game;
     publicRooms.push({ id, name: playerName, players: 1 });
@@ -90,12 +106,16 @@ io.on('connection', (socket) => {
   });
 
   function startGame(game, room) {
+    // Раздаём по 6 карт
     for (let i = 0; i < 6; i++) {
       game.players[0].hand.push(game.deck.pop());
       game.players[1].hand.push(game.deck.pop());
     }
+    // Определяем первого атакующего по младшему козырю
+    game.turn = getFirstAttacker(game.players, game.trump);
     game.status = 'playing';
     game.phase = 'attack';
+    game.roundCount = 0;
     io.to(room).emit('gameState', game);
   }
 
@@ -137,18 +157,20 @@ io.on('connection', (socket) => {
     const card = player.hand[cardIndex];
     if (!card) return;
 
-    // Проверка допустимости подкидывания
+    // Если на столе уже есть карты – можно подкинуть только карту того же ранга
     if (game.table.length > 0) {
       const allowedRanks = new Set(
         game.table.flatMap(p => [p.attacker.rank, p.defender?.rank]).filter(Boolean)
       );
       if (!allowedRanks.has(card.rank)) return;
-      if (game.table.length >= game.players[1 - game.turn].hand.length) return;
+      // Лимит подкидывания: не больше 6 карт за ход и не больше, чем карт у защищающегося
+      if (game.table.length >= Math.min(6, game.players[1 - game.turn].hand.length)) return;
     }
 
     player.hand.splice(cardIndex, 1);
     game.table.push({ attacker: card });
     game.phase = 'defense';
+    game.roundCount++;
     io.to(room).emit('gameState', game);
   });
 
@@ -163,6 +185,7 @@ io.on('connection', (socket) => {
     const defendCard = defender.hand[defendIndex];
     if (!attackCard || !defendCard || game.table[attackIndex].defender) return;
 
+    // Проверка: бьёт ли карта
     const beats =
       (defendCard.suit === attackCard.suit && defendCard.rank > attackCard.rank) ||
       (defendCard.trump && !attackCard.trump) ||
@@ -191,6 +214,7 @@ io.on('connection', (socket) => {
 
     game.turn = 1 - game.turn;
     game.phase = 'attack';
+    game.roundCount = 0;
     io.to(room).emit('gameState', game);
   });
 
@@ -211,6 +235,7 @@ io.on('connection', (socket) => {
 
     game.turn = 1 - game.turn;
     game.phase = 'attack';
+    game.roundCount = 0;
     io.to(room).emit('gameState', game);
   });
 
