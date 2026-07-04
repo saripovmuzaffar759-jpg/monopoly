@@ -99,7 +99,7 @@
     const socket = io();
     let game, myId;
 
-    // Звуки (Web Audio API)
+    // Звуки
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     function playSound(freq, duration) {
       if (!audioCtx) return;
@@ -117,13 +117,9 @@
     function playBeat() { playSound(1000, 0.15); }
     function playTake() { playSound(300, 0.2); }
 
-    // Запрос списка комнат
     socket.on('roomList', (rooms) => {
-      const listDiv = document.getElementById('roomList');
-      listDiv.innerHTML = rooms.map(r => 
-        `<div class="room-list-item" onclick="joinRoomById('${r.id}')">
-          ${r.name} (${r.players}/2) – ${r.id}
-        </div>`
+      document.getElementById('roomList').innerHTML = rooms.map(r => 
+        `<div class="room-list-item" onclick="joinRoomById('${r.id}')">${r.name} (${r.players}/2) – ${r.id}</div>`
       ).join('');
     });
     socket.emit('getRoomList');
@@ -191,7 +187,7 @@
       else status = 'Ожидание хода соперника';
       document.getElementById('statusMsg').textContent = status;
 
-      // Сортировка карт: сначала козыри по убыванию, затем обычные по масти
+      // Сортировка: козыри вправо, внутри по убыванию
       if (me) {
         const trump = game.trump;
         me.hand.sort((a, b) => {
@@ -251,7 +247,7 @@
     function handleCardClick(index) {
       const me = game.players.find(p => p.id === myId);
       if (!me || game.status !== 'playing') return;
-      if (game.phase === 'attack' && game.players[game.turn]?.id === myId) {
+      if ((game.phase === 'attack' || game.phase === 'postBeat') && game.players[game.turn]?.id === myId) {
         socket.emit('attack', game.id, index);
         playAttack();
       } else if (game.phase === 'defense' && game.players[1 - game.turn]?.id === myId) {
@@ -260,9 +256,6 @@
           socket.emit('defend', game.id, attackIndex, index);
           playDefend();
         }
-      } else if (game.phase === 'postBeat' && game.players[game.turn]?.id === myId) {
-        socket.emit('attack', game.id, index);
-        playAttack();
       }
     }
 
