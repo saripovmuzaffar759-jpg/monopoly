@@ -9,6 +9,7 @@ const io = new Server(server);
 app.use(express.static('public'));
 
 const games = {};
+const publicRooms = []; // { id, name, players }
 
 function roomId() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -16,7 +17,7 @@ function roomId() {
 
 const suits = ['♠', '♣', '♥', '♦'];
 const values = ['6','7','8','9','10','J','Q','K','A'];
-const valueOrder = Object.fromEntries(values.map((v, i) => [v, i + 6])); // 6..14
+const valueOrder = Object.fromEntries(values.map((v, i) => [v, i + 6]));
 
 function createDeck() {
   const deck = [];
@@ -38,6 +39,9 @@ function shuffle(arr) {
 }
 
 io.on('connection', (socket) => {
+  let currentPlayerRoom = null;
+  let currentPlayerIndex = null;
+
   socket.on('createRoom', (playerName) => {
     const id = roomId();
     const deck = createDeck();
@@ -46,29 +50,43 @@ io.on('connection', (socket) => {
 
     const game = {
       id,
-      players: [{ id: socket.id, name: playerName, hand: [] }],
+      players: [{ id: socket.id, name: playerName, hand: [], connected: true, timeoutId: null }],
       deck,
       trump: trumpSuit,
       turn: 0,
       table: [],
       status: 'waiting',
       phase: 'attack',
+      chat: [],
     };
     games[id] = game;
+    publicRooms.push({ id, name: playerName, players: 1 });
     socket.join(id);
+    currentPlayerRoom = id;
+    currentPlayerIndex = 0;
     socket.emit('gameState', game);
+    io.emit('roomList', publicRooms);
   });
 
   socket.on('joinRoom', (room, playerName) => {
     const game = games[room];
     if (!game) return socket.emit('error', 'Комната не найдена');
     if (game.players.length >= 2) return socket.emit('error', 'Комната заполнена');
-    game.players.push({ id: socket.id, name: playerName, hand: [] });
+    game.players.push({ id: socket.id, name: playerName, hand: [], connected: true, timeoutId: null });
+    const roomEntry = publicRooms.find(r => r.id === room);
+    if (roomEntry) roomEntry.players = 2;
     socket.join(room);
+    currentPlayerRoom = room;
+    currentPlayerIndex = game.players.length - 1;
     if (game.players.length === 2) {
       startGame(game, room);
     }
     io.to(room).emit('gameState', game);
+    io.emit('roomList', publicRooms);
+  });
+
+  socket.on('getRoomList', () => {
+    socket.emit('roomList', publicRooms);
   });
 
   function startGame(game, room) {
@@ -97,6 +115,13 @@ io.on('connection', (socket) => {
       game.status = 'gameOver';
       game.winner = alive[0]?.name || 'Ничья';
       io.to(room).emit('gameState', game);
+      // удаляем комнату из списка через 5 минут
+      setTimeout(() => {
+        delete games[room];
+        const idx = publicRooms.findIndex(r => r.id === room);
+        if (idx !== -1) publicRooms.splice(idx, 1);
+        io.emit('roomList', publicRooms);
+      }, 300000);
       return true;
     }
     return false;
@@ -107,14 +132,16 @@ io.on('connection', (socket) => {
     if (!game || game.status !== 'playing') return;
     const player = game.players[game.turn];
     if (player.id !== socket.id) return;
-    if (game.phase === 'defense') return; // ещё не время атаковать
+    if (game.phase === 'defense') return;
     const card = player.hand[cardIndex];
     if (!card) return;
 
-    // Проверка подкидывания: если стол не пуст, можно ходить только картой того же ранга, что уже есть на столе
+    // Проверка подкидывания
     if (game.table.length > 0) {
       const allowedRanks = new Set(game.table.flatMap(p => [p.attacker.rank, p.defender?.rank]).filter(Boolean));
-      if (!allowedRanks.has(card.rank)) return; // нельзя подкинуть
+      if (!allowedRanks.has(card.rank)) return;
+      // Ограничение: нельзя подкинуть больше карт, чем у защищающегося
+      if (game.table.length >= game.players[1 - game.turn].hand.length) return;
     }
 
     player.hand.splice(cardIndex, 1);
@@ -142,7 +169,7 @@ io.on('connection', (socket) => {
 
     const allDefended = game.table.every(p => p.defender);
     if (allDefended) {
-      game.phase = 'postBeat'; // теперь атакующий может подкинуть или завершить
+      game.phase = 'postBeat';
     }
     io.to(room).emit('gameState', game);
   });
@@ -152,11 +179,9 @@ io.on('connection', (socket) => {
     if (!game || game.status !== 'playing' || game.phase !== 'postBeat') return;
     const player = game.players[game.turn];
     if (player.id !== socket.id) return;
-    // все карты со стола уходят в бито (сброс)
     game.table = [];
     drawCards(game);
     if (checkGameOver(game, room)) return;
-    // ход переходит к следующему игроку (защищавшийся становится атакующим)
     game.turn = 1 - game.turn;
     game.phase = 'attack';
     io.to(room).emit('gameState', game);
@@ -167,7 +192,6 @@ io.on('connection', (socket) => {
     if (!game || game.status !== 'playing') return;
     const defender = game.players[1 - game.turn];
     if (defender.id !== socket.id) return;
-    // защищающийся забирает все карты со стола
     game.table.forEach(p => {
       defender.hand.push(p.attacker);
       if (p.defender) defender.hand.push(p.defender);
@@ -175,23 +199,56 @@ io.on('connection', (socket) => {
     game.table = [];
     drawCards(game);
     if (checkGameOver(game, room)) return;
-    // после взятия ход переходит к защищавшемуся (он становится атакующим)
     game.turn = 1 - game.turn;
     game.phase = 'attack';
     io.to(room).emit('gameState', game);
   });
 
+  socket.on('chat', (room, message) => {
+    const game = games[room];
+    if (!game) return;
+    const player = game.players.find(p => p.id === socket.id);
+    if (!player) return;
+    game.chat.push({ name: player.name, text: message, time: new Date().toLocaleTimeString() });
+    if (game.chat.length > 50) game.chat.shift();
+    io.to(room).emit('gameState', game);
+  });
+
+  // Переподключение
+  socket.on('rejoin', (room) => {
+    const game = games[room];
+    if (!game) return;
+    const player = game.players.find(p => p.id === socket.id);
+    if (player) {
+      player.connected = true;
+      if (player.timeoutId) clearTimeout(player.timeoutId);
+      player.timeoutId = null;
+      socket.join(room);
+      socket.emit('gameState', game);
+    }
+  });
+
   socket.on('disconnect', () => {
-    for (const id in games) {
-      const g = games[id];
-      const idx = g.players.findIndex(p => p.id === socket.id);
-      if (idx !== -1) {
-        g.players.splice(idx, 1);
-        if (g.players.length === 0) delete games[id];
-        else {
-          g.status = 'waiting';
-          io.to(id).emit('gameState', g);
-        }
+    // Игрок отключился – ждём 30 секунд, потом удаляем
+    if (currentPlayerRoom && games[currentPlayerRoom]) {
+      const player = games[currentPlayerRoom].players[currentPlayerIndex];
+      if (player) {
+        player.connected = false;
+        player.timeoutId = setTimeout(() => {
+          const game = games[currentPlayerRoom];
+          if (!game) return;
+          // удаляем игрока, завершаем игру или ждём нового
+          game.players = game.players.filter(p => p.id !== player.id);
+          if (game.players.length === 0) {
+            delete games[currentPlayerRoom];
+            const idx = publicRooms.findIndex(r => r.id === currentPlayerRoom);
+            if (idx !== -1) publicRooms.splice(idx, 1);
+            io.emit('roomList', publicRooms);
+          } else {
+            game.status = 'waiting';
+            io.to(currentPlayerRoom).emit('gameState', game);
+          }
+        }, 30000);
       }
     }
   });
